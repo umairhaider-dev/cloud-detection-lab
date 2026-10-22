@@ -1,0 +1,15 @@
+# Secrets: never commit
+.env
+*.pem
+*.key
+.aws/
+*credentials*
+
+# Raw (unsanitized) attack logs contain your account ID and IP.
+# Only sanitized fixtures from captures/ get committed.
+captures/raw/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
