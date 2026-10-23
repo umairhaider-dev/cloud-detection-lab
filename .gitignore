@@ -13,3 +13,5 @@ captures/raw/
 .venv/
 __pycache__/
 *.pyc
+infra/lab.env
+*:Zone.Identifier
