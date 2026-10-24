@@ -2,17 +2,14 @@
 
  A cloud detection lab that catches real AWS attacks, like disabling CloudTrail and stealing EC2 passwords, in an Elastic SIEM. Proven by running live attack techniques with Stratus Red Team and finding every one in the logs.
 
-![Architecture](Architecture.png)
-![GetPasswordData attack found in Kibana](Log.png)
-
 ## How it works
 
 AWS API call → CloudTrail → S3 → SQS → Filebeat → Elasticsearch → Kibana (Elastic SIEM)
 
-[architecture diagram screenshot]
+![Architecture](Architecture.png)
 
 Attacks are run with Stratus Red Team against a dedicated lab account. Detection rules are
-written in Sigma and will be tested in CI before they deploy (Week 3).
+written in Sigma and will be tested in CI before they deploy.
 
 ## Design decisions
 
@@ -36,7 +33,7 @@ written in Sigma and will be tested in CI before they deploy (Week 3).
 | Attempt to stop CloudTrail logging, using the Filebeat role | `StopLogging`, denied with `AccessDenied` |
 | `ec2-get-password-data` (Stratus) | 30 `GetPasswordData` calls in 9 seconds from a new role, all denied with `Client.UnauthorizedOperation` |
 
-[GetPasswordData screenshot, account ID blurred]
+![GetPasswordData attack found in Kibana](Log.png)
 
 ## Reproduce it
 
@@ -48,4 +45,4 @@ What broke and how I fixed it: [`journal.md`](journal.md)
 
 ## Status
 
-Week 1 done: pipeline and first attack. Next: Sigma rules for the attack plan.
+Done: pipeline and first attack. Next: Sigma rules for the attack plan.
