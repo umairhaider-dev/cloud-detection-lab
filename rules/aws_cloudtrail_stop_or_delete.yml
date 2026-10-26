@@ -1,0 +1,34 @@
+title: AWS CloudTrail Logging Stopped or Trail Deleted
+id: 0bc8769b-1771-4ffb-91c2-3380fbe1cdce
+status: experimental
+description: |
+  Detects an attempt to stop CloudTrail logging or delete a trail. Attackers do this
+  to blind defenders before acting. Level is high because legitimate teams rarely stop
+  or delete their audit trail, and each event deserves a manual review.
+  Triage: check errorCode first. If it is set (for example AccessDenied), the attempt
+  was blocked, but the caller still tried to disable logging and should be
+  investigated. If errorCode is empty, logging really stopped: confirm with
+  get-trail-status, restart logging, and review everything the same identity did around
+  that time.
+references:
+  - https://attack.mitre.org/techniques/T1685/002/
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.defense-evasion.cloudtrail-stop/
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.defense-evasion.cloudtrail-delete/
+author: Umair Haider
+date: 2026-10-26
+tags:
+  - attack.defense-impairment
+  - attack.t1685.002
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: cloudtrail.amazonaws.com
+    eventName:
+      - StopLogging
+      - DeleteTrail
+  condition: selection
+falsepositives:
+  - An administrator decommissioning or replacing a trail during planned maintenance
+level: high
