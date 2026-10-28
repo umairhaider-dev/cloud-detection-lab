@@ -1,0 +1,44 @@
+title: AWS CloudTrail Log Bucket Tampering
+id: 2bf2a3dc-c38e-4f72-9e62-bbc9176ea8f9
+status: experimental
+description: |
+  Detects changes to the CloudTrail log bucket's notification, policy or lifecycle, or the
+  bucket's deletion. Each one breaks the log pipeline while CloudTrail itself keeps reporting
+  Logging: true, so the StopLogging/DeleteTrail rule never fires.
+  Level is high because this bucket is only touched by the infra scripts; outside a known
+  run, any change here is someone interfering with our evidence.
+  Triage: check errorCode first (a denied attempt is still suspicious). Then by eventName:
+    - PutBucketNotification: does the config still send to detlab-cloudtrail-events?
+      If not, the SIEM goes quiet. Check for a gap in new CloudTrail events.
+    - PutBucketPolicy / DeleteBucketPolicy: can CloudTrail still write? Was access granted
+      to an outside principal or account?
+    - PutBucketLifecycle / DeleteBucketLifecycle: look for a short Expiration (e.g. 1 day),
+      which auto-deletes logs before anyone reads them.
+    - DeleteBucket: treat as an incident. Confirm the trail status and its destination.
+  Scoped by bucketName prefix so changes to other buckets in the account don't alert.
+references:
+  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/cloudtrail-logging-s3-info.html
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.defense-evasion.cloudtrail-lifecycle-rule/
+author: Umair Haider
+date: 2026-10-28
+tags:
+  - attack.defense-impairment
+  - attack.t1685.002
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: s3.amazonaws.com
+    eventName:
+      - PutBucketNotification
+      - PutBucketPolicy
+      - DeleteBucketPolicy
+      - PutBucketLifecycle
+      - DeleteBucketLifecycle
+      - DeleteBucket
+    requestParameters.bucketName|startswith: detlab-cloudtrail-
+  condition: selection
+falsepositives:
+  - The lab's infra scripts (01-cloudtrail.sh, 02-sqs-notifications.sh) creating or repairing the bucket's policy and notification
+level: high

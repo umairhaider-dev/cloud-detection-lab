@@ -1,0 +1,40 @@
+title: AWS CloudTrail Trail Configuration Changed
+id: 59ffbfc6-4d62-4eb7-9445-9e63a1d661a8
+status: experimental
+description: |
+  Detects changes to a CloudTrail trail's settings (UpdateTrail) or to what it records
+  (PutEventSelectors). An attacker can blind the trail without ever calling StopLogging,
+  so the trail still reports Logging: true.
+  Level is medium because UpdateTrail and PutEventSelectors are also routine admin work;
+  the dangerous variants are identified in triage, not in the match.
+  Triage: check errorCode first (a denied attempt is still suspicious). Then read
+  requestParameters. Escalate to high if any of these appear:
+    - isMultiRegionTrail: false, or includeGlobalServiceEvents: false
+      (blinds the trail to IAM and STS, which are recorded in us-east-1)
+    - s3BucketName changed (logs now go somewhere we don't collect from)
+    - enableLogFileValidation: false (tampering with log files becomes undetectable)
+    - event selectors with includeManagementEvents: false, readWriteType: ReadOnly,
+      or excludeManagementEventSources set (the trail silently drops management events)
+  Confirm the userIdentity is a known admin and the change matches a ticket or IaC run.
+references:
+  - https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_UpdateTrail.html
+  - https://docs.aws.amazon.com/awscloudtrail/latest/APIReference/API_PutEventSelectors.html
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.defense-evasion.cloudtrail-event-selectors/
+author: Umair Haider
+date: 2026-10-28
+tags:
+  - attack.defense-impairment
+  - attack.t1685.002
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: cloudtrail.amazonaws.com
+    eventName:
+      - UpdateTrail
+      - PutEventSelectors
+  condition: selection
+falsepositives:
+  - An administrator or the lab's infra scripts (01-cloudtrail.sh) repairing drift or changing the trail's KMS key or data-event selectors
+level: medium

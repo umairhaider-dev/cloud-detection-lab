@@ -1,0 +1,46 @@
+title: AWS CloudTrail Log Queue Tampering
+id: f8c18b20-ac71-47ed-a944-1ee60cbe3cd8
+status: experimental
+description: |
+  Detects deletion, purge, attribute changes or access-permission changes on the SQS queue
+  that tells Filebeat about new CloudTrail log files. Breaking the queue blinds the SIEM
+  while CloudTrail keeps logging.
+  Level is high because the queue is only managed by the infra scripts and has no routine
+  reason to be purged or deleted.
+  Triage: check errorCode first (a denied attempt is still suspicious). Then by eventName:
+    - DeleteQueue: the SIEM is blind from this point. Confirm and recreate the pipeline.
+    - PurgeQueue: pending notifications are gone, so those log files never reach the SIEM.
+      Note the time and backfill the gap from S3 directly.
+    - SetQueueAttributes: read requestParameters.attributes. Dangerous changes are a short
+      MessageRetentionPeriod, a Policy that blocks s3.amazonaws.com from SendMessage or
+      grants access to an outside account, or a large DelaySeconds.
+    - AddPermission / RemovePermission: SQS's older API for changing who can access the
+      queue, which edits the queue policy without a SetQueueAttributes call. Check which
+      principal or account was added, or whether S3's SendMessage permission was removed.
+  Scoped by queueUrl suffix so other queues in the account don't alert.
+references:
+  - https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/logging-using-cloudtrail.html
+  - https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_AddPermission.html
+  - https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_RemovePermission.html
+author: Umair Haider
+date: 2026-10-28
+tags:
+  - attack.defense-impairment
+  - attack.t1685.002
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: sqs.amazonaws.com
+    eventName:
+      - DeleteQueue
+      - PurgeQueue
+      - SetQueueAttributes
+      - AddPermission
+      - RemovePermission
+    requestParameters.queueUrl|endswith: /detlab-cloudtrail-events
+  condition: selection
+falsepositives:
+  - The lab's 02-sqs-notifications.sh setting the queue policy or repairing retention drift
+level: high
