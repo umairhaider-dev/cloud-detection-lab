@@ -19,11 +19,41 @@ TARGETS = {
         "eventSource": "ec2.amazonaws.com",
         "eventName": {"GetPasswordData"},
     },
+    "aws_cloudtrail_config_weakened": {
+        "eventSource": "cloudtrail.amazonaws.com",
+        "eventName": {"UpdateTrail", "PutEventSelectors"},
+    },
+    "aws_s3_log_bucket_tampering": {
+        "eventSource": "s3.amazonaws.com",
+        "eventName": {"PutBucketNotification", "PutBucketPolicy", "DeleteBucketPolicy",
+                      "PutBucketLifecycle", "DeleteBucketLifecycle", "DeleteBucket"},
+        # requestParameters.bucketName|startswith
+        "scope": ("bucketName", "startswith", "detlab-cloudtrail-"),
+    },
+    "aws_sqs_log_queue_tampering": {
+        "eventSource": "sqs.amazonaws.com",
+        "eventName": {"DeleteQueue", "PurgeQueue", "SetQueueAttributes"},
+        # requestParameters.queueUrl|endswith
+        "scope": ("queueUrl", "endswith", "/detlab-cloudtrail-events"),
+    },
 }
 
 # Services whose non-target events make the most useful "near miss" negatives:
 # same service as a rule, different API call. Sampled first.
-NEAR_MISS_SOURCES = {"cloudtrail.amazonaws.com", "ec2.amazonaws.com"}
+NEAR_MISS_SOURCES = {"cloudtrail.amazonaws.com", "ec2.amazonaws.com",
+                     "s3.amazonaws.com", "sqs.amazonaws.com"}
+
+# Harmless calls on the same services as the rules. Always included in the
+# benign set (up to NEAR_MISS_PER_CALL of each), because they are the negatives
+# most likely to catch a rule that matches too broadly.
+NEAR_MISS_CALLS = {
+    ("s3.amazonaws.com", "GetBucketAcl"),
+    ("cloudtrail.amazonaws.com", "DescribeTrails"),
+    ("cloudtrail.amazonaws.com", "GetTrailStatus"),
+    ("sqs.amazonaws.com", "GetQueueAttributes"),
+    ("sqs.amazonaws.com", "CreateQueue"),
+}
+NEAR_MISS_PER_CALL = 3
 
 
 def iter_log_files(root: Path):
@@ -50,10 +80,14 @@ def read_records(path: Path) -> list[dict]:
 
 
 def matches(record: dict, target: dict) -> bool:
-    return (
-        record.get("eventSource") == target["eventSource"]
-        and record.get("eventName") in target["eventName"]
-    )
+    if not (record.get("eventSource") == target["eventSource"]
+            and record.get("eventName") in target["eventName"]):
+        return False
+    if "scope" not in target:
+        return True
+    field, how, value = target["scope"]
+    actual = str((record.get("requestParameters") or {}).get(field, ""))
+    return actual.startswith(value) if how == "startswith" else actual.endswith(value)
 
 
 def sort_key(record: dict):
@@ -143,7 +177,16 @@ def main() -> int:
                 continue
             others.append(rec)
 
-    benign = stratified_sample(others, args.benign_size)
+    near_groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for rec in sorted(others, key=sort_key):
+        key = (rec.get("eventSource", ""), rec.get("eventName", ""))
+        if key in NEAR_MISS_CALLS and len(near_groups[key]) < NEAR_MISS_PER_CALL:
+            near_groups[key].append(rec)
+    near = [r for recs in near_groups.values() for r in recs]
+    near_ids = {id(r) for r in near}
+    rest = [r for r in others if id(r) not in near_ids]
+    benign = sorted(near + stratified_sample(rest, max(args.benign_size - len(near), 0)),
+                    key=sort_key)
 
     out_files = {
         name: args.output / name / "should_fire.jsonl" for name in TARGETS
@@ -173,6 +216,21 @@ def main() -> int:
         print(f"  distinct identities:  {len(identities - {None})}")
         print(f"  first/last:           {gpd_sorted[0].get('eventTime')} .. {gpd_sorted[-1].get('eventTime')}")
         print(f"  errorCodes:           {', '.join(sorted(errors))}")
+
+    for name in ("aws_cloudtrail_config_weakened", "aws_s3_log_bucket_tampering",
+                 "aws_sqs_log_queue_tampering"):
+        recs = sorted(hits[name], key=sort_key)
+        print(f"\n{name}: {len(recs)} record(s) -> {out_files[name]}")
+        for rec in recs:
+            rp = rec.get("requestParameters") or {}
+            target = rp.get("bucketName") or rp.get("queueUrl") or rp.get("name") \
+                or rp.get("trailName") or "-"
+            print(f"  {rec.get('eventTime')}  {rec.get('eventName'):24} {target}  "
+                  f"errorCode={rec.get('errorCode', '-')}")
+
+    print("\nNear-misses in the benign set:")
+    for key in sorted(NEAR_MISS_CALLS):
+        print(f"  {key[1]:20} {len(near_groups.get(key, []))}")
 
     sources = {(r.get("eventSource"), r.get("eventName")) for r in benign}
     print(f"\nBenign sample: {len(benign)} of {len(others)} normal records, "
