@@ -1,0 +1,45 @@
+title: AWS IAM Role Trust Policy Grants an External Account
+id: 24a76eba-35ce-4363-ac2d-92c647bf129d
+status: experimental
+description: |
+  Detects an IAM role being created, or an existing role's trust policy being
+  updated, so that an AWS account other than your own can assume it. This is a
+  common persistence backdoor: the outside account can later call
+  sts:AssumeRole into this account without holding any credential here.
+  Known misses:
+  (1) a trust policy naming your own account and an outside account together
+      is removed by the own-account filter;
+  (2) an outside account given as a bare 12-digit ID instead of an ARN
+      ("AWS": "123456789012") does not contain "arn:aws:iam::";
+  (3) a wildcard principal ("AWS": "*") trusts everyone and also has no ARN.
+references:
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.persistence.iam-create-backdoor-role/
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.persistence.iam-backdoor-role/
+  - https://attack.mitre.org/techniques/T1098/003/
+author: Umair Haider
+date: 2026-10-31
+tags:
+  - attack.persistence
+  - attack.privilege-escalation
+  - attack.t1098.003
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  create:
+    eventSource: iam.amazonaws.com
+    eventName: CreateRole
+    requestParameters.assumeRolePolicyDocument|contains: 'arn:aws:iam::'
+  update:
+    eventSource: iam.amazonaws.com
+    eventName: UpdateAssumeRolePolicy
+    requestParameters.policyDocument|contains: 'arn:aws:iam::'
+  filter_own_account:
+    - requestParameters.assumeRolePolicyDocument|contains|expand: '%own_account%'
+    - requestParameters.policyDocument|contains|expand: '%own_account%'
+  condition: (create or update) and not filter_own_account
+falsepositives:
+  - Cross-account roles for vendor or SaaS integrations (monitoring, backup, security tooling)
+  - CI/CD or deployment pipelines running from a separate AWS account
+  - Roles shared with other accounts in the same AWS Organization
+level: high
