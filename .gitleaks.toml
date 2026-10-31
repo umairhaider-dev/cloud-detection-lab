@@ -1,0 +1,12 @@
+title = "cloud-detection-lab"
+
+[extend]
+useDefault = true
+
+# CloudTrail tlsDetails.keyExchange holds a TLS group name like X25519MLKEM768.
+# It is high-entropy enough to trip generic-api-key but is not a secret.
+[[allowlists]]
+description = "TLS key-exchange group names in CloudTrail tlsDetails"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^X25519MLKEM768$''']
