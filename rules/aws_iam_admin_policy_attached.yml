@@ -1,0 +1,40 @@
+title: AWS IAM AdministratorAccess Policy Attached
+id: 0f2f2be9-0f3b-445e-8ab5-dbdb3080e272
+status: experimental
+description: |
+  Detects the AdministratorAccess managed policy being attached to an IAM role,
+  user or group. Attackers attach it to a role or user they control to turn a
+  foothold into full control of the account.
+  Triage: check whether the target has a permissions boundary (for example
+  AWSDenyAll). A boundary can make the attachment ineffective, but the attempt
+  still shows intent.
+  Known misses: inline policies granting "Action": "*" (PutRolePolicy,
+  PutUserPolicy, PutGroupPolicy); customer-managed policies with admin rights
+  under another name; CreatePolicyVersion on an already-attached policy; other
+  powerful managed policies such as IAMFullAccess.
+references:
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.persistence.iam-create-backdoor-role/
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.persistence.iam-create-admin-user/
+  - https://attack.mitre.org/techniques/T1098/003/
+author: Umair Haider
+date: 2026-10-31
+tags:
+  - attack.persistence
+  - attack.privilege-escalation
+  - attack.t1098.003
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: iam.amazonaws.com
+    eventName:
+      - AttachRolePolicy
+      - AttachUserPolicy
+      - AttachGroupPolicy
+    requestParameters.policyArn|endswith: '/AdministratorAccess'
+  condition: selection
+falsepositives:
+  - Administrators intentionally granting admin rights (break-glass role, account bootstrap)
+  - Infrastructure-as-code pipelines (Terraform, CloudFormation) creating admin deployment roles
+level: high

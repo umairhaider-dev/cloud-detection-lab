@@ -1,0 +1,33 @@
+title: AWS IAM Long-Lived Access Key Created
+id: 14174349-a74d-40d7-8307-fa5cd3ceaa73
+status: experimental
+description: |
+  Detects creation of a long-lived IAM user access key (AKIA...). This account
+  signs in through IAM Identity Center and does not use IAM user keys, so any new
+  key is unexpected. Attackers create a key on a user they control, often one
+  they created minutes earlier, to keep access after their session ends.
+  Triage: compare userIdentity with requestParameters.userName. A key created
+  for a different user than the caller, or for a user created just before
+  (CreateUser), is the backdoor pattern.
+  Known misses: use of keys that already exist; temporary credentials
+  (GetSessionToken, AssumeRole), which never call CreateAccessKey.
+references:
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.persistence.iam-create-admin-user/
+  - https://attack.mitre.org/techniques/T1098/001/
+author: Umair Haider
+date: 2026-10-31
+tags:
+  - attack.persistence
+  - attack.t1098.001
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: iam.amazonaws.com
+    eventName: CreateAccessKey
+  condition: selection
+falsepositives:
+  - Planned key rotation for an existing IAM user
+  - Third-party tools or CI/CD systems that cannot assume a role
+level: medium
