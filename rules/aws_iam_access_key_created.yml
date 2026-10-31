@@ -3,8 +3,9 @@ id: 14174349-a74d-40d7-8307-fa5cd3ceaa73
 status: experimental
 description: |
   Detects creation of a long-lived IAM user access key (AKIA...). This account
-  blocks console passwords for IAM users and has no IAM users of its own (it
-  signs in through IAM Identity Center), so any new long-lived key is unusual.
+  blocks console passwords for IAM users and has no IAM users of its own
+  (sign-in is a Builder ID session on AccountFullAccessRole), so any new
+  long-lived key is unusual.
   Attackers create a key on a user they control, often one they created minutes
   earlier, to keep access after their session ends.
   Triage: compare the caller (userIdentity) with requestParameters.userName.
