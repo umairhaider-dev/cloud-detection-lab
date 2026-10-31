@@ -38,6 +38,7 @@ DOC_V4_NETS = [ipaddress.ip_network(n) for n in
                ("203.0.113.0/24", "198.51.100.0/24", "192.0.2.0/24")]
 DOC_V6_NET = ipaddress.ip_network("2001:db8::/32")
 ACCOUNT_PLACEHOLDERS = ["111122223333", "444455556666", "777788889999"]
+OWN_PLACEHOLDER = "444455556666"   # own account always maps here (%own_account% in tests)
 
 
 def is_ipv4(s: str) -> bool:
@@ -87,7 +88,7 @@ class Discovery:
             for item in node:
                 self.walk(item, key)
         elif isinstance(node, str):
-            if key in ("accountId", "recipientAccountId", "vpcEndpointAccountId") \
+            if key in ("accountId", "recipientAccountId", "vpcEndpointAccountId", "userId") \
                     and re.fullmatch(r"\d{12}", node):
                 self.accounts.add(node)
             self.scan_string(node)
@@ -108,15 +109,19 @@ class Discovery:
                 self.emails.add(m)
 
 
-def build_mapping(d: Discovery, redact: list[str]) -> dict[str, dict[str, str]]:
+def build_mapping(d: Discovery, redact: list[str], own: str | None = None) -> dict[str, dict[str, str]]:
     """Assign placeholders in sorted order so re-runs give identical output."""
     m: dict[str, dict[str, str]] = {}
 
-    accounts = sorted(d.accounts - set(ACCOUNT_PLACEHOLDERS))
+    # Own account is pinned; outside accounts get the rest in sorted order,
+    # so re-runs stay identical and "own vs outside" is always distinguishable.
     m["account"] = {}
-    for i, acct in enumerate(accounts):
-        m["account"][acct] = (ACCOUNT_PLACEHOLDERS[i] if i < len(ACCOUNT_PLACEHOLDERS)
-                              else f"{i + 1:012d}")
+    if own:
+        m["account"][own] = OWN_PLACEHOLDER
+    pool = [p for p in ACCOUNT_PLACEHOLDERS if p != OWN_PLACEHOLDER]
+    others = sorted(d.accounts - set(ACCOUNT_PLACEHOLDERS) - {own})
+    for i, acct in enumerate(others):
+        m["account"][acct] = pool[i] if i < len(pool) else f"{i + 1:012d}"
 
     m["aws_id"] = {}
     counters: dict[str, int] = {}
@@ -306,7 +311,7 @@ def main() -> int:
     for records in data.values():
         for rec in records:
             disc.walk(rec)
-    mapping = build_mapping(disc, args.redact)
+    mapping = build_mapping(disc, args.redact, args.account_id[0] if args.account_id else None)
 
     # Pass 2 in memory.
     rep = Replacer(mapping)
