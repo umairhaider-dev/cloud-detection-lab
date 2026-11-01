@@ -36,3 +36,4 @@ DRY_RUN=1 ./infra/01-cloudtrail.sh        # preview: changes nothing
 - **Tested.** Verified against a simulated AWS for: fresh build, no-op re-run,
   repair of five kinds of drift, dry run, wrong account, missing config, and
   preserving unrelated notifications. Linted with `shellcheck`.
+- **S3 Block Public Access (account level):** enabled 2026-11-01 with `infra/s3-block-public-access.sh`; it was never on. Access Analyzer cannot be enabled: it is blocked by a service control policy on this account.
