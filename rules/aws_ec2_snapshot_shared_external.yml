@@ -1,0 +1,43 @@
+title: AWS EBS Snapshot Shared With Another Account or the Public
+id: 83a32384-4ba1-41ec-bc61-c0a12db7eef9
+status: experimental
+description: |
+  Detects an EBS snapshot's create-volume permission being granted to another
+  AWS account or to everyone. The receiving account can create a volume from
+  the snapshot and read every file on the disk, without any access to this
+  account.
+  Triage: which snapshot is it, and which volume was it taken from
+  (DescribeSnapshots)? Is it still shared? Can it be unshared now? Is the
+  receiving account known? An "all" group means the disk is public.
+  Removing a permission (createVolumePermission.remove) does not match, so
+  cleanup and unshare calls stay quiet.
+  Known misses:
+  (1) sharing an AMI (ModifyImageAttribute, Stratus ec2-share-ami);
+  (2) sharing an RDS snapshot (ModifyDBSnapshotAttribute, Stratus
+      rds-share-snapshot);
+  (3) copying the snapshot to another region or account by other means.
+references:
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.exfiltration.ec2-share-ebs-snapshot/
+  - https://attack.mitre.org/techniques/T1537/
+author: Umair Haider
+date: 2026-11-01
+tags:
+  - attack.exfiltration
+  - attack.t1537
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: ec2.amazonaws.com
+    eventName: ModifySnapshotAttribute
+    requestParameters.attributeType: CREATE_VOLUME_PERMISSION
+  share_account:
+    requestParameters.createVolumePermission.add.items.userId|exists: true
+  share_public:
+    requestParameters.createVolumePermission.add.items.group: all
+  condition: selection and (share_account or share_public)
+falsepositives:
+  - Planned sharing with a backup, disaster-recovery or migration account
+  - Sharing with other accounts in the same AWS Organization
+level: high
