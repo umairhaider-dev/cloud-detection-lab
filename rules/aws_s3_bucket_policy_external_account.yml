@@ -1,0 +1,47 @@
+title: AWS S3 Bucket Policy Grants an External Account
+id: 30ec6f7c-837c-4694-8d64-9a2850d60a92
+status: experimental
+description: |
+  Detects a bucket policy being set that names an AWS account other than your
+  own as a principal. An attacker who controls that outside account can then
+  read or copy the bucket's data straight into their own account, with no
+  credentials in this one.
+  Triage: check errorCode first; a denied call means attempted, not exposed.
+  Which bucket is it, and what does it hold? Which actions were granted
+  (s3:GetObject and s3:ListBucket mean the data can be read)? Is the outside
+  account a known partner? If the bucket is the CloudTrail log bucket,
+  aws_s3_log_bucket_tampering also fires; both are correct.
+  Known misses:
+  (1) public access through a "*" principal; the flattened Statement list
+      cannot tell an Allow "*" from the standard Deny "*" over insecure
+      transport. Account-level S3 Block Public Access rejects public bucket
+      policies instead (enabled 2026-11-01). Access Analyzer is blocked by a
+      service control policy on this account, so nothing detects this case;
+  (2) an outside account given as a bare 12-digit ID;
+  (3) a policy naming your own account and an outside account together;
+  (4) access granted through bucket ACLs or access point policies.
+references:
+  - https://stratus-red-team.cloud/attack-techniques/AWS/aws.exfiltration.s3-backdoor-bucket-policy/
+  - https://attack.mitre.org/techniques/T1537/
+author: Umair Haider
+date: 2026-11-01
+tags:
+  - attack.exfiltration
+  - attack.t1537
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: s3.amazonaws.com
+    eventName: PutBucketPolicy
+    requestParameters.bucketPolicy.Statement.Principal.AWS|contains: 'arn:aws:iam::'
+  filter_own_account:
+    requestParameters.bucketPolicy.Statement.Principal.AWS|contains|expand: '%own_account%'
+  condition: selection and not filter_own_account
+falsepositives:
+  - Cross-account access for a vendor or backup tool
+  - Log delivery from or to another account
+  - Data sharing with a known partner account
+  - A Deny statement naming an outside account; the flattened Statement list cannot tie Effect to Principal
+level: high
